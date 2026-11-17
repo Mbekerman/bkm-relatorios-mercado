@@ -29,3 +29,6 @@ LOGIN_FALSO = os.environ.get('LOGIN_FALSO', '')
 
 # Chromium do Playwright (no contêiner oficial do Playwright não precisa).
 CHROMIUM_PATH = os.environ.get('CHROMIUM_PATH') or None
+
+# Versão da folha de impressão (pdf.py). Mude quando ela mudar: os PDFs guardados da versão anterior são refeitos.
+VERSAO_PDF = 2

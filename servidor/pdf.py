@@ -38,6 +38,8 @@ th, td { padding: 3px 6px !important; }
 summary { list-style: none; color: var(--fg) !important; }
 summary::-webkit-details-marker { display: none; }
 #tip { display: none !important; }
+/* a lista de empreendimentos pesquisados fica só na tela (pedido do Moises, 17/nov/2026) */
+.card details, .card details ~ p { display: none !important; }
 </style>
 """
 

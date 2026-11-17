@@ -47,7 +47,7 @@ class Guarda:
 
     # ---- PDF
     def pdf(self, rid):
-        return self._tirar(f'pdf/{rid}.pdf')
+        return self._tirar(f'pdf/{rid}-v{config.VERSAO_PDF}.pdf')
 
     def guardar_pdf(self, rid, dados):
-        self._pôr(f'pdf/{rid}.pdf', dados, 'application/pdf')
+        self._pôr(f'pdf/{rid}-v{config.VERSAO_PDF}.pdf', dados, 'application/pdf')
