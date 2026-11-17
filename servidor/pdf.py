@@ -27,8 +27,13 @@ section { padding-top: 12px !important; gap: 10px !important; }
 #pct td, #pct th { white-space: normal !important; font-size: 10px !important; padding: 3px 4px !important; }
 .grid2 { grid-template-columns: repeat(var(--nr, 2), minmax(0, 1fr)) !important; gap: 20px !important; }
 .grid2.um { grid-template-columns: 1fr !important; }
-.cards { grid-template-columns: 1fr !important; }
-.card { break-inside: auto !important; page-break-inside: auto !important; }
+/* capa: recortes e cenários cabem na primeira folha (pedido do Moises, 17/nov/2026) */
+#recortes { gap: 6px !important; }
+#recortes dl, #recortes .kv { font-size: 10.5px !important; gap: 1px 12px !important; line-height: 1.3; }
+.cards { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)) !important; gap: 10px !important; }
+.card { padding: 8px 14px !important; gap: 4px !important; break-inside: avoid !important; page-break-inside: avoid !important; }
+.card h3 { font-size: 15px !important; margin: 0 !important; }
+.card .kv { font-size: 11.5px !important; gap: 1px 12px !important; }
 .elist { columns: 3 !important; font-size: 11px; }
 .mini, .tbl, .chart, .legend, .raio, header, #recortes { break-inside: avoid; page-break-inside: avoid; }
 .col > .raio { break-after: avoid; }

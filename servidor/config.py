@@ -31,4 +31,4 @@ LOGIN_FALSO = os.environ.get('LOGIN_FALSO', '')
 CHROMIUM_PATH = os.environ.get('CHROMIUM_PATH') or None
 
 # Versão da folha de impressão (pdf.py). Mude quando ela mudar: os PDFs guardados da versão anterior são refeitos.
-VERSAO_PDF = 2
+VERSAO_PDF = 3
