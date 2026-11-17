@@ -23,7 +23,7 @@ h1 { font-size: 26px !important; }
 h2 { font-size: 18px !important; break-after: avoid; page-break-after: avoid; }
 section { padding-top: 12px !important; gap: 10px !important; }
 /* cada métrica começa numa folha: o título nunca fica sozinho no pé da página */
-#lanc, #oferta, #preco, #pct, #vso, #indice, #curvas, #tabela { break-before: page; page-break-before: always; border-top: 0 !important; padding-top: 0 !important; }
+#lanc, #oferta, #lancvend, #preco, #pct, #vso, #indice, #curvas, #tabela { break-before: page; page-break-before: always; border-top: 0 !important; padding-top: 0 !important; }
 #pct td, #pct th { white-space: normal !important; font-size: 10px !important; padding: 3px 4px !important; }
 .grid2 { grid-template-columns: repeat(var(--nr, 2), minmax(0, 1fr)) !important; gap: 20px !important; }
 .grid2.um { grid-template-columns: 1fr !important; }
