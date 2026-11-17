@@ -23,7 +23,7 @@ h1 { font-size: 26px !important; }
 h2 { font-size: 18px !important; break-after: avoid; page-break-after: avoid; }
 section { padding-top: 12px !important; gap: 10px !important; }
 /* cada métrica começa numa folha: o título nunca fica sozinho no pé da página */
-#lanc, #oferta, #lancvend, #preco, #pct, #vso, #indice, #curvas, #tabela { break-before: page; page-break-before: always; border-top: 0 !important; padding-top: 0 !important; }
+#mapa, #lanc, #oferta, #lancvend, #preco, #pct, #vso, #indice, #curvas, #tabela { break-before: page; page-break-before: always; border-top: 0 !important; padding-top: 0 !important; }
 #pct td, #pct th { white-space: normal !important; font-size: 10px !important; padding: 3px 4px !important; }
 .grid2 { grid-template-columns: repeat(var(--nr, 2), minmax(0, 1fr)) !important; gap: 20px !important; }
 .grid2.um { grid-template-columns: 1fr !important; }
@@ -43,6 +43,10 @@ th, td { padding: 3px 6px !important; }
 summary { list-style: none; color: var(--fg) !important; }
 summary::-webkit-details-marker { display: none; }
 #tip { display: none !important; }
+/* mapa na segunda folha, um cenário por folha (pedido do Moises, 17/nov/2026) */
+#mapa .mapa { height: 560px !important; }
+#mapas > .col + .col { break-before: page; page-break-before: always; }
+#mapas > .col { break-inside: avoid; page-break-inside: avoid; gap: 8px !important; }
 /* a lista de empreendimentos pesquisados fica só na tela (pedido do Moises, 17/nov/2026) */
 .card details, .card details ~ p { display: none !important; }
 </style>
@@ -76,11 +80,20 @@ def preparar_html(html):
 
 async def gerar(html):
     nav = await _navegador()
-    ctx = await nav.new_context(viewport={'width': LARGURA, 'height': 1400}, color_scheme='light')
+    ctx = await nav.new_context(viewport={'width': LARGURA, 'height': 1400}, color_scheme='light',
+                                  device_scale_factor=2)  # ladrilhos do mapa em alta resolução
     try:
         p = await ctx.new_page()
         await p.emulate_media(media='print', color_scheme='light')
-        await p.set_content(preparar_html(html), wait_until='networkidle', timeout=60000)
+        # a página abre no endereço do app (servida aqui mesmo, sem rede): a chave do Google Maps só vale com esse referer
+        url = (config.URL_PUBLICA or 'http://localhost').rstrip('/') + '/__pdf'
+        conteudo = preparar_html(html)
+        await p.route(url, lambda r: r.fulfill(body=conteudo, content_type='text/html; charset=utf-8'))
+        await p.goto(url, wait_until='networkidle', timeout=60000)
+        try:  # o mapa avisa quando os ladrilhos e os pontos (Places) terminaram; sem mapa a variável nem existe
+            await p.wait_for_function('window.__mapaPronto !== false', timeout=35000)
+        except Exception:
+            pass
         await p.evaluate("""() => { document.documentElement.setAttribute('data-theme','light');
             document.querySelectorAll('details').forEach(d => d.open = true);
             return document.fonts ? document.fonts.ready.then(() => true) : true; }""")

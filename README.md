@@ -30,7 +30,7 @@ pip install -r requirements.txt && python3 -m playwright install chromium
 cd servidor && SESSAO_SEGREDO=x MERCADO_URL=http://127.0.0.1:9100 MERCADO_CHAVE=teste \
   LOGIN_FALSO=voce@bkm.com.br PASTA_LOCAL=/tmp/rm uvicorn app:app --port 8080
 ```
-`LOGIN_FALSO` pula o Google e só serve para teste local: nunca defina no Cloud Run. Para o mapa e a busca de
+`LOGIN_FALSO` pula o Google e só serve para teste local: nunca defina no Cloud Run. Para a janela do mapa e a busca de
 endereço, defina também `GOOGLE_MAPS_KEY`.
 
 Testes: `python3 -m pytest tests -q`.

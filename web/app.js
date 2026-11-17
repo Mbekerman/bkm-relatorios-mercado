@@ -1,4 +1,4 @@
-// Relatórios de mercado BKM: formulário, mapa dos pontos, histórico e visualização.
+// Relatórios de mercado BKM: formulário, mapa dos pontos (em janela), histórico e visualização.
 // Sem build: módulo ES puro. O servidor (servidor/app.py) valida tudo de novo.
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -51,8 +51,8 @@ function formVazio() {
     excluir_nr: true, lancamento_efetivo: true, periodo_inicio: '', excluir_nomes: '', cenarios: [cenarioVazio(1)] };
 }
 let F = ler(RASCUNHO) || formVazio();
-let ATIVO = 0;           // ponto selecionado (o clique no mapa vai para ele)
-let MODO = null;         // {i, j}: o próximo clique marca o ponto de exclusão j do cenário i
+let ATIVO = 0;           // ponto selecionado
+let MODO = null;         // janela do mapa aberta: {i, j} (j = ponto de exclusão j do cenário i; sem j = o pin)
 const guardar = () => salvar(RASCUNHO, F);
 
 // spec do histórico -> formulário (botão Duplicar)
@@ -162,7 +162,7 @@ function telaNovo() {
       <section class="card" aria-labelledby="h-pontos">
         <header><h2 id="h-pontos">Pontos</h2>
           <button class="btn peq" data-a="add-cenario" ${F.cenarios.length >= OPC.max_cenarios ? 'disabled' : ''}>Adicionar ponto</button></header>
-        <p class="suave" style="margin:0">Cada ponto vira um cenário no relatório. Selecione um ponto e clique no mapa, ou busque o endereço. Dá para repetir o mesmo endereço com exclusões diferentes.</p>
+        <p class="suave" style="margin:0">Cada ponto vira um cenário no relatório. Digite o endereço e escolha uma sugestão, ou abra o mapa e dê dois cliques no local. Dá para repetir o mesmo endereço com exclusões diferentes.</p>
         <div id="pontos" style="display:flex;flex-direction:column;gap:12px">${F.cenarios.map(htmlCenario).join('')}</div>
       </section>
 
@@ -172,10 +172,8 @@ function telaNovo() {
       </div>
       <div id="avisos"></div>
     </div>
-    <div class="mapa-box"><div id="mapa"></div><div class="mapa-aviso" id="mapa-aviso" hidden></div></div>
   </div>`;
   ligarForm();
-  iniciarMapa();
 }
 
 function htmlCenario(c, i) {
@@ -186,8 +184,8 @@ function htmlCenario(c, i) {
       <button class="btn texto peq" data-a="ativar" data-i="${i}" ${i === ATIVO ? 'disabled' : ''}>${i === ATIVO ? 'Selecionado' : 'Selecionar'}</button>
       ${F.cenarios.length > 1 ? `<button class="icbtn" data-a="del-cenario" data-i="${i}" title="Remover ponto" aria-label="Remover ponto ${i + 1}">✕</button>` : ''}</header>
     <div class="linha">
-      <div class="campo" style="flex:3 1 220px"><label class="rotulo" for="end-${i}">Endereço</label><input id="end-${i}" data-k="cenarios.${i}.pin.descricao" maxlength="160" placeholder="Ex.: R. Catarina Álvares, 136, São Paulo" value="${esc(c.pin.descricao)}"></div>
-      <button class="btn peq" data-a="buscar" data-i="${i}" ${CFG.maps_key ? '' : 'disabled title="Sem chave do Google Maps"'}>Buscar</button>
+      <div class="campo" style="flex:3 1 220px"><label class="rotulo" for="end-${i}">Endereço</label><input id="end-${i}" data-k="cenarios.${i}.pin.descricao" data-busca="pin" data-i="${i}" maxlength="160" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" placeholder="Ex.: R. Catarina Álvares, 136, São Paulo" value="${esc(c.pin.descricao)}"></div>
+      <button class="btn peq" data-a="mapa" data-i="${i}" ${CFG.maps_key ? '' : 'disabled title="Sem chave do Google Maps"'}>Abrir mapa</button>
     </div>
     <div class="linha">
       <div class="campo"><label class="rotulo" for="lat-${i}">Latitude</label><input id="lat-${i}" type="number" step="0.00001" data-k="cenarios.${i}.pin.lat" value="${esc(c.pin.lat ?? '')}"></div>
@@ -206,7 +204,7 @@ function htmlCenario(c, i) {
       ${c.pontos.map((p, j) => `<div class="linha">
           <div class="campo" style="flex:2 1 160px"><label class="rotulo" for="pn-${i}-${j}">Excluir em volta de</label><input id="pn-${i}-${j}" data-k="cenarios.${i}.pontos.${j}.nome" maxlength="60" placeholder="Ex.: favela, indústria" value="${esc(p.nome)}"></div>
           <div class="campo" style="flex:0 1 110px"><label class="rotulo" for="pk-${i}-${j}">Raio (km)</label><input id="pk-${i}-${j}" type="number" min="0.1" max="10" step="0.1" data-k="cenarios.${i}.pontos.${j}.km" value="${esc(p.km)}"></div>
-          <button class="btn peq" data-a="marcar" data-i="${i}" data-j="${j}">${MODO && MODO.i === i && MODO.j === j ? 'Clique no mapa…' : p.lat != null ? 'Remarcar' : 'Marcar no mapa'}</button>
+          <button class="btn peq" data-a="marcar" data-i="${i}" data-j="${j}">${p.lat != null ? 'Remarcar no mapa' : 'Marcar no mapa'}</button>
           <button class="icbtn" data-a="del-ponto" data-i="${i}" data-j="${j}" aria-label="Tirar exclusão">✕</button>
         </div>`).join('')}
       <div><button class="btn texto peq" data-a="add-ponto" data-i="${i}">Excluir em volta de um ponto do mapa</button></div>
@@ -214,7 +212,7 @@ function htmlCenario(c, i) {
   </article>`;
 }
 
-function redesenharPontos() { $('#pontos').innerHTML = F.cenarios.map(htmlCenario).join(''); $('[data-a="add-cenario"]').disabled = F.cenarios.length >= OPC.max_cenarios; desenharMapa(); }
+function redesenharPontos() { const p = $('#pontos'); if (p) { p.innerHTML = F.cenarios.map(htmlCenario).join(''); $('[data-a="add-cenario"]').disabled = F.cenarios.length >= OPC.max_cenarios; } desenharMapa(); }
 
 function setPath(obj, path, v) { const k = path.split('.'); const last = k.pop(); let o = obj; for (const p of k) o = o[p]; o[last] = v; }
 
@@ -226,9 +224,11 @@ function ligarForm() {
       let v = el.type === 'checkbox' ? el.checked : el.value;
       if (/\.pin\.(lat|lon)$/.test(k)) v = num(v);
       setPath(F, k, v); guardar();
-      if (/\.pin\.(lat|lon)$/.test(k)) desenharMapa();
     }
+    if (el.dataset.busca) BUSCA.digitou(el);
   });
+  t.addEventListener('keydown', e => { if (e.target.dataset?.busca) BUSCA.tecla(e); });
+  t.addEventListener('focusout', e => { if (e.target.dataset?.busca) setTimeout(() => BUSCA.fechar(), 150); });
   t.addEventListener('change', e => {
     const el = e.target, a = el.dataset.a, i = +el.dataset.i;
     if (a === 'barreira') { const c = F.cenarios[i]; c.barreiras = el.checked ? [...new Set([...c.barreiras, el.dataset.v])] : c.barreiras.filter(x => x !== el.dataset.v); guardar(); }
@@ -249,12 +249,12 @@ function ligarForm() {
     }
     if (a === 'add-cenario') { const n = F.cenarios.length; const c = cenarioVazio(n + 1); F.cenarios.push(c); ATIVO = n; guardar(); redesenharPontos(); $(`#nome-${n}`)?.select(); return; }
     if (a === 'del-cenario') { F.cenarios.splice(i, 1); ATIVO = Math.min(ATIVO, F.cenarios.length - 1); MODO = null; guardar(); redesenharPontos(); return; }
-    if (a === 'ativar') { ATIVO = i; MODO = null; redesenharPontos(); centrar(i); return; }
-    if (a === 'buscar') return buscarEndereco(i);
+    if (a === 'ativar') { ATIVO = i; redesenharPontos(); return; }
+    if (a === 'mapa') return abrirMapa({ i });
     if (a === 'est-del') { F.cenarios[i].est.lista.splice(j, 1); guardar(); redesenharPontos(); return; }
-    if (a === 'add-ponto') { F.cenarios[i].pontos.push({ km: 1, lat: null, lon: null, nome: '' }); MODO = { i, j: F.cenarios[i].pontos.length - 1 }; ATIVO = i; guardar(); redesenharPontos(); avisoMapa('Clique no mapa para marcar o ponto de exclusão.'); return; }
+    if (a === 'add-ponto') { F.cenarios[i].pontos.push({ km: 1, lat: null, lon: null, nome: '' }); ATIVO = i; guardar(); redesenharPontos(); return abrirMapa({ i, j: F.cenarios[i].pontos.length - 1 }); }
     if (a === 'del-ponto') { F.cenarios[i].pontos.splice(j, 1); MODO = null; guardar(); redesenharPontos(); return; }
-    if (a === 'marcar') { MODO = { i, j }; ATIVO = i; redesenharPontos(); avisoMapa('Clique no mapa para marcar o ponto de exclusão.'); return; }
+    if (a === 'marcar') return abrirMapa({ i, j });
     if (a === 'limpar') { if (confirmar('Limpar o formulário inteiro?')) { F = formVazio(); ATIVO = 0; MODO = null; guardar(); telaNovo(); } return; }
     if (a === 'gerar') return gerar();
   });
@@ -281,68 +281,179 @@ async function gerar() {
   } finally { b.disabled = false; b.textContent = 'Gerar relatório'; st.textContent = ''; }
 }
 
-// ---- mapa (Google Maps)
-let MAPA = null, MARCAS = [], GEOCODER = null;
-function avisoMapa(t) { const a = $('#mapa-aviso'); if (!a) return; a.textContent = t || ''; a.hidden = !t; }
+// ---- Google Maps: busca de endereço (sugestões) e mapa em janela (pedido do Moises, 17/nov/2026)
+// O mapa não fica na tela: abre numa janela grande com busca; o local é escolhido com dois cliques e confirmado.
+let MAPA = null, MARCAS = [], GEOCODER = null, PROVISORIO = null, ESCOLHA = null;
 async function carregarMaps() {
   if (window.google?.maps?.Map) return true;
   if (!CFG.maps_key) return false;
   if (!window.__bkmMaps) window.__bkmMaps = new Promise((ok, falha) => {
     window.__bkmMapsPronto = () => ok(true);
     const s = document.createElement('script');
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(CFG.maps_key)}&callback=__bkmMapsPronto&language=pt-BR&region=BR&v=weekly`;
-    s.async = true; s.onerror = () => falha(new Error('Google Maps não carregou')); document.head.appendChild(s);
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(CFG.maps_key)}&callback=__bkmMapsPronto&libraries=places&language=pt-BR&region=BR&v=weekly&loading=async`;
+    s.async = true; s.onerror = () => { window.__bkmMaps = null; falha(new Error('Google Maps não carregou')); }; document.head.appendChild(s);
   });
   return window.__bkmMaps;
 }
-async function iniciarMapa() {
-  const box = $('#mapa');
-  let ok = false; try { ok = await carregarMaps(); } catch { ok = false; }
-  if (!ok) { box.innerHTML = '<div class="mapa-sem">Mapa indisponível (sem a chave do Google Maps).<br>Informe latitude e longitude de cada ponto.</div>'; return; }
-  MAPA = new google.maps.Map(box, { center: { lat: -23.55, lng: -46.63 }, zoom: 11, clickableIcons: false, streetViewControl: false, mapTypeControl: false, fullscreenControl: false });
-  GEOCODER = new google.maps.Geocoder();
-  MAPA.addListener('click', ev => cliqueMapa(ev.latLng.lat(), ev.latLng.lng()));
-  desenharMapa(true);
+const limpaEnd = e => (e || '').replace(/, Brasil$/, '').replace(/, \d{5}-\d{3}$/, '');
+
+// Sugestões de endereço (Places, como na busca do Google). Uma lista só, presa ao campo em foco.
+const BUSCA = (() => {
+  let campo = null, itens = [], sel = -1, timer = null, token = null, seq = 0;
+  const lista = document.createElement('ul'); lista.className = 'sugestoes'; lista.setAttribute('role', 'listbox'); lista.hidden = true; lista.id = 'sugestoes';
+  lista.addEventListener('mousedown', e => e.preventDefault()); // não tira o foco do campo
+  lista.addEventListener('click', e => { const li = e.target.closest('li[data-n]'); if (li) escolher(+li.dataset.n); });
+  function posicionar() {
+    const host = campo.closest('dialog') || document.body; if (lista.parentNode !== host) host.appendChild(lista);
+    const r = campo.getBoundingClientRect(); Object.assign(lista.style, { left: r.left + 'px', top: (r.bottom + 4) + 'px', width: Math.max(r.width, 320) + 'px' });
+  }
+  function desenhar() {
+    if (!itens.length) return fechar();
+    lista.innerHTML = itens.map((p, n) => `<li role="option" data-n="${n}" aria-selected="${n === sel}"><b>${esc(p.mainText?.text || p.text?.text || '')}</b><span>${esc(p.secondaryText?.text || '')}</span></li>`).join('');
+    posicionar(); lista.hidden = false; campo.setAttribute('aria-expanded', 'true'); campo.setAttribute('aria-controls', lista.id);
+  }
+  function fechar() { lista.hidden = true; itens = []; sel = -1; campo?.setAttribute('aria-expanded', 'false'); }
+  async function buscar(q, n) {
+    try {
+      if (!await carregarMaps()) return;
+      const { AutocompleteSuggestion, AutocompleteSessionToken } = await google.maps.importLibrary('places');
+      token = token || new AutocompleteSessionToken();
+      const centro = MAPA && MODO ? MAPA.getCenter() : { lat: -23.55, lng: -46.63 };
+      const r = await AutocompleteSuggestion.fetchAutocompleteSuggestions({ input: q, sessionToken: token, includedRegionCodes: ['br'], language: 'pt-BR', region: 'br', locationBias: { center: centro, radius: 50000 } });
+      if (n !== seq) return; // chegou depois de outra digitação
+      itens = r.suggestions.map(x => x.placePrediction).filter(Boolean).slice(0, 6); sel = -1; desenhar();
+    } catch (e) { console.warn('sugestões', e); }
+  }
+  async function escolher(n) {
+    const p = itens[n], c = campo; fechar(); if (!p) return;
+    try {
+      const pl = p.toPlace(); await pl.fetchFields({ fields: ['location', 'formattedAddress', 'displayName', 'types'] }); token = null;
+      const lat = +pl.location.lat().toFixed(6), lon = +pl.location.lng().toFixed(6);
+      const nome = pl.types?.includes('street_address') || pl.types?.includes('premise') || pl.types?.includes('route') ? '' : pl.displayName;
+      const end = limpaEnd(pl.formattedAddress); const desc = nome && !end.startsWith(nome) ? `${nome}, ${end}` : end;
+      if (c.dataset.busca === 'pin') { const i = +c.dataset.i, x = F.cenarios[i]; x.pin = { lat, lon, descricao: desc }; ATIVO = i; guardar(); redesenharPontos(); aviso(''); }
+      else if (c.dataset.busca === 'janela') { c.value = desc; irPara(lat, lon, desc); }
+    } catch (e) { aviso('A busca falhou: ' + esc(e.message || ''), 'erro'); }
+  }
+  return {
+    digitou(el) {
+      campo = el; clearTimeout(timer); const q = el.value.trim();
+      if (q.length < 3) return fechar();
+      const n = ++seq; timer = setTimeout(() => buscar(q, n), 250);
+    },
+    tecla(e) {
+      campo = e.target;
+      if (lista.hidden) { if (e.key === 'Enter' && campo.dataset.busca === 'janela') { e.preventDefault(); geocodificar(campo.value); } return; }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); sel = (sel + (e.key === 'ArrowDown' ? 1 : itens.length - 1)) % itens.length; desenhar(); }
+      else if (e.key === 'Enter') { e.preventDefault(); escolher(sel < 0 ? 0 : sel); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); fechar(); }
+    },
+    fechar,
+  };
+})();
+
+// Enter sem sugestão na janela: geocodifica o texto como está
+async function geocodificar(q) {
+  q = (q || '').trim(); if (!q || !GEOCODER) return;
+  try {
+    const r = await GEOCODER.geocode({ address: q, region: 'br', componentRestrictions: { country: 'BR' } });
+    const g = r.results?.[0]; if (!g) return dica('Endereço não encontrado.');
+    irPara(g.geometry.location.lat(), g.geometry.location.lng(), limpaEnd(g.formatted_address));
+  } catch (e) { dica('A busca falhou.'); }
 }
-function desenharMapa(enquadrar = false) {
-  if (!MAPA) return;
+
+// ---- janela do mapa
+function dica(t) { const d = $('#mapa-dica'); if (d) d.textContent = t; }
+function textoDica() { return MODO?.j != null ? 'Dê dois cliques no centro da área a excluir.' : 'Dê dois cliques no local do ponto. Use a busca para chegar perto.'; }
+function janela() {
+  let d = $('#janela-mapa'); if (d) return d;
+  d = document.createElement('dialog'); d.id = 'janela-mapa'; d.className = 'janela-mapa'; d.setAttribute('aria-labelledby', 'janela-tit');
+  d.innerHTML = `<header><h2 id="janela-tit">Escolher no mapa</h2>
+      <div class="campo busca"><input id="janela-busca" data-busca="janela" type="search" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-label="Buscar endereço ou lugar" placeholder="Buscar endereço ou lugar"></div>
+      <button class="icbtn" data-j="fechar" aria-label="Fechar" title="Fechar">✕</button></header>
+    <div class="janela-corpo"><div id="mapa"></div>
+      <div class="mapa-aviso" id="mapa-dica" role="status"></div>
+      <div class="confirma" id="confirma" hidden role="alertdialog" aria-labelledby="confirma-tit" aria-describedby="confirma-end">
+        <h3 id="confirma-tit">Selecionar este endereço?</h3><p id="confirma-end"></p><p class="suave" id="confirma-pos"></p>
+        <div class="acoes"><button class="btn texto" data-j="cancelar">Cancelar</button><button class="btn principal" data-j="ok">Selecionar</button></div></div></div>`;
+  document.body.appendChild(d);
+  const busca = $('#janela-busca', d);
+  busca.addEventListener('input', () => BUSCA.digitou(busca));
+  busca.addEventListener('keydown', e => BUSCA.tecla(e));
+  busca.addEventListener('blur', () => setTimeout(() => BUSCA.fechar(), 150));
+  d.addEventListener('click', e => {
+    const b = e.target.closest('[data-j]'); if (!b) return;
+    if (b.dataset.j === 'fechar') d.close();
+    if (b.dataset.j === 'cancelar') cancelarEscolha();
+    if (b.dataset.j === 'ok') confirmarEscolha();
+  });
+  d.addEventListener('cancel', e => { if (!$('#confirma').hidden) { e.preventDefault(); cancelarEscolha(); } });
+  d.addEventListener('close', () => { BUSCA.fechar(); cancelarEscolha(); MODO = null; redesenharPontos(); });
+  return d;
+}
+async function abrirMapa(modo) {
+  let ok = false; try { ok = await carregarMaps(); } catch { ok = false; }
+  if (!ok) return aviso('O mapa não carregou (sem a chave do Google Maps). Informe latitude e longitude do ponto.', 'erro');
+  MODO = modo; ATIVO = modo.i;
+  const d = janela(), c = F.cenarios[modo.i];
+  $('#janela-tit').textContent = modo.j != null ? `Ponto ${modo.i + 1} · centro da exclusão ${modo.j + 1}` : (c.nome && c.nome !== `Ponto ${modo.i + 1}` ? `Ponto ${modo.i + 1} · ${c.nome}` : `Ponto ${modo.i + 1}`);
+  $('#janela-busca').value = '';
+  d.showModal();
+  if (!MAPA) {
+    MAPA = new google.maps.Map($('#mapa'), { center: { lat: -23.55, lng: -46.63 }, zoom: 11, disableDoubleClickZoom: true, clickableIcons: false,
+      streetViewControl: false, mapTypeControl: true, mapTypeControlOptions: { position: google.maps.ControlPosition.LEFT_BOTTOM }, fullscreenControl: false });
+    GEOCODER = new google.maps.Geocoder();
+    MAPA.addListener('dblclick', ev => propor(ev.latLng.lat(), ev.latLng.lng()));
+  }
+  cancelarEscolha(); desenharMapa();
+  const alvo = modo.j != null && c.pontos[modo.j]?.lat != null ? { lat: c.pontos[modo.j].lat, lng: c.pontos[modo.j].lon } : c.pin.lat != null ? { lat: +c.pin.lat, lng: +c.pin.lon } : null;
+  if (alvo) { MAPA.setCenter(alvo); MAPA.setZoom(modo.j != null ? 14 : 15); } else { MAPA.setCenter({ lat: -23.55, lng: -46.63 }); MAPA.setZoom(11); }
+  dica(textoDica());
+  setTimeout(() => $('#janela-busca').focus(), 50);
+}
+function irPara(lat, lon, desc) {
+  MAPA.panTo({ lat, lng: lon }); MAPA.setZoom(17);
+  if (PROVISORIO) PROVISORIO.setMap(null);
+  PROVISORIO = new google.maps.Marker({ map: MAPA, position: { lat, lng: lon }, title: desc, opacity: .75 });
+  dica(`Achei "${desc}". Dê dois cliques no local exato para selecionar.`);
+}
+async function propor(lat, lon) {
+  lat = +lat.toFixed(6); lon = +lon.toFixed(6); ESCOLHA = { lat, lon, descricao: '' };
+  if (PROVISORIO) PROVISORIO.setMap(null);
+  PROVISORIO = new google.maps.Marker({ map: MAPA, position: { lat, lng: lon }, zIndex: 50 });
+  const cx = $('#confirma'), ex = MODO?.j != null;
+  $('#confirma-tit').textContent = ex ? 'Usar este local como centro da exclusão?' : 'Selecionar este endereço?';
+  $('#confirma-end').textContent = 'Buscando o endereço…'; $('#confirma-pos').textContent = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+  cx.hidden = false; $('[data-j="ok"]', cx).focus();
+  try {
+    const r = await GEOCODER.geocode({ location: { lat, lng: lon } });
+    const end = limpaEnd(r.results?.[0]?.formatted_address);
+    if (ESCOLHA?.lat === lat && ESCOLHA?.lon === lon) { ESCOLHA.descricao = end; $('#confirma-end').textContent = end || 'Sem endereço para este local.'; }
+  } catch { if (ESCOLHA?.lat === lat) $('#confirma-end').textContent = 'Sem endereço para este local.'; }
+}
+function cancelarEscolha() { ESCOLHA = null; const cx = $('#confirma'); if (cx) cx.hidden = true; if (PROVISORIO) { PROVISORIO.setMap(null); PROVISORIO = null; } if (MODO) dica(textoDica()); }
+function confirmarEscolha() {
+  if (!ESCOLHA || !MODO) return;
+  const c = F.cenarios[MODO.i];
+  if (MODO.j != null) { const p = c.pontos[MODO.j]; if (p) { p.lat = ESCOLHA.lat; p.lon = ESCOLHA.lon; if (!p.nome && ESCOLHA.descricao) p.nome = ESCOLHA.descricao.split(',')[0].slice(0, 60); } }
+  else c.pin = { lat: ESCOLHA.lat, lon: ESCOLHA.lon, descricao: ESCOLHA.descricao || c.pin.descricao };
+  guardar(); $('#janela-mapa').close();
+}
+function desenharMapa() {
+  if (!MAPA || !MODO) return;
   MARCAS.forEach(m => m.setMap(null)); MARCAS = [];
-  const lim = new google.maps.LatLngBounds(); let algum = false;
   F.cenarios.forEach((c, i) => {
     if (c.pin.lat == null || c.pin.lon == null) return;
-    const pos = { lat: +c.pin.lat, lng: +c.pin.lon }; lim.extend(pos); algum = true;
-    MARCAS.push(new google.maps.Marker({ map: MAPA, position: pos, label: { text: String(i + 1), color: '#fff', fontWeight: '700' },
+    const pos = { lat: +c.pin.lat, lng: +c.pin.lon };
+    MARCAS.push(new google.maps.Marker({ map: MAPA, position: pos, clickable: false, label: { text: String(i + 1), color: '#fff', fontWeight: '700' },
       icon: { path: google.maps.SymbolPath.CIRCLE, scale: 13, fillColor: CORES[i], fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 }, zIndex: i === ATIVO ? 10 : 1 }));
-    if (i === ATIVO) for (const r of F.raios_km) MARCAS.push(new google.maps.Circle({ map: MAPA, center: pos, radius: r * 1000, strokeColor: CORES[i], strokeOpacity: .8, strokeWeight: 1.5, fillOpacity: 0, clickable: false }));
+    if (i !== ATIVO) return;
+    for (const r of F.raios_km) MARCAS.push(new google.maps.Circle({ map: MAPA, center: pos, radius: r * 1000, strokeColor: CORES[i], strokeOpacity: .8, strokeWeight: 1.5, fillOpacity: 0, clickable: false }));
     for (const s of c.est.ativo ? c.est.lista : []) for (const e of ESTACOES.filter(e => e.nome === s))
       MARCAS.push(new google.maps.Circle({ map: MAPA, center: { lat: e.lat, lng: e.lon }, radius: (num(c.est.km) || 0) * 1000, strokeColor: '#b3261e', strokeOpacity: .7, strokeWeight: 1, fillColor: '#b3261e', fillOpacity: .08, clickable: false }));
     for (const p of c.pontos) if (p.lat != null)
       MARCAS.push(new google.maps.Circle({ map: MAPA, center: { lat: p.lat, lng: p.lon }, radius: (num(p.km) || 0) * 1000, strokeColor: '#b3261e', strokeOpacity: .7, strokeWeight: 1, fillColor: '#b3261e', fillOpacity: .08, clickable: false }));
   });
-  if (enquadrar && algum) { MAPA.fitBounds(lim); if (MAPA.getZoom() > 13) MAPA.setZoom(13); }
-}
-function centrar(i) { const c = F.cenarios[i]; if (MAPA && c.pin.lat != null) MAPA.panTo({ lat: +c.pin.lat, lng: +c.pin.lon }); desenharMapa(); }
-async function cliqueMapa(lat, lon) {
-  lat = +lat.toFixed(6); lon = +lon.toFixed(6);
-  if (MODO) { const p = F.cenarios[MODO.i].pontos[MODO.j]; if (p) { p.lat = lat; p.lon = lon; } MODO = null; avisoMapa(''); guardar(); redesenharPontos(); return; }
-  const c = F.cenarios[ATIVO]; c.pin.lat = lat; c.pin.lon = lon; guardar(); redesenharPontos();
-  if (GEOCODER) try {
-    const r = await GEOCODER.geocode({ location: { lat, lng: lon } });
-    const end = r.results?.[0]?.formatted_address; if (end && c.pin.lat === lat) { c.pin.descricao = end.replace(/, Brasil$/, '').replace(/, \d{5}-\d{3}$/, ''); guardar(); redesenharPontos(); }
-  } catch { /* sem endereço: fica só a posição */ }
-}
-async function buscarEndereco(i) {
-  const c = F.cenarios[i]; const q = (c.pin.descricao || '').trim();
-  if (!q) return aviso('Escreva o endereço antes de buscar.');
-  if (!GEOCODER) { await iniciarMapa(); if (!GEOCODER) return aviso('Busca indisponível sem o Google Maps.'); }
-  try {
-    const r = await GEOCODER.geocode({ address: q, region: 'br', componentRestrictions: { country: 'BR' } });
-    const g = r.results?.[0]; if (!g) return aviso('Endereço não encontrado.');
-    c.pin.lat = +g.geometry.location.lat().toFixed(6); c.pin.lon = +g.geometry.location.lng().toFixed(6); ATIVO = i;
-    const precisao = g.geometry.location_type;
-    guardar(); redesenharPontos(); centrar(i); MAPA?.setZoom(14);
-    aviso(precisao === 'ROOFTOP' ? '' : `Achei uma posição aproximada (${precisao === 'RANGE_INTERPOLATED' ? 'interpolada na rua' : 'centro da rua ou bairro'}). Confira no mapa e, se precisar, clique no lugar certo.`);
-  } catch (e) { aviso('Busca falhou: ' + esc(e.message || e.code || ''), 'erro'); }
 }
 
 // ---- lista
