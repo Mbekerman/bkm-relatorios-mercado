@@ -1,79 +1,79 @@
-# Deploy (Cloud Run, projeto próprio)
+# Deploy (Cloud Run, projeto `bkm-terrenos`)
 
-Projeto do Google Cloud **separado** do `bkm-terrenos`, na organização `bkm.com.br`. Os comandos rodam no
-Cloud Shell. Troque `bkm-relatorios-mercado` se escolher outro id de projeto.
+O app roda no mesmo projeto do serviço de mercado (`bkm-terrenos`, número 469931692112), como serviço próprio
+`relatorios-mercado`. Um projeto separado foi tentado em 17/nov/2026, mas a conta de faturamento já estava no
+limite de projetos vinculados (o projeto vazio `bkm-relatorios-mercado` ficou criado, sem faturamento). Os comandos
+rodam no Cloud Shell.
 
 ```bash
-PROJ=bkm-relatorios-mercado
+PROJ=bkm-terrenos
 REG=southamerica-east1
+BUCKET=bkm-terrenos-relatorios-app
+URL=https://relatorios-mercado-469931692112.southamerica-east1.run.app
+SA=469931692112-compute@developer.gserviceaccount.com
 ```
 
-## 1. Projeto e APIs (uma vez)
-```bash
-gcloud projects create $PROJ --organization=$(gcloud organizations list --filter=displayName=bkm.com.br --format='value(name)')
-gcloud billing projects link $PROJ --billing-account=<conta de faturamento>   # a mesma do bkm-terrenos serve
-gcloud config set project $PROJ
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com \
-  secretmanager.googleapis.com storage.googleapis.com maps-backend.googleapis.com geocoding-backend.googleapis.com
-```
+## O que já existe (feito em 17/nov/2026)
+| Recurso | Para quê |
+|---|---|
+| Segredo `rm-mercado-chave` | chave deste app no serviço de mercado; o hash dela está em `im-chaves` como cliente `relatorios-app` |
+| Segredo `rm-sessao-segredo` | assina o cookie de sessão |
+| Segredo `rm-google-client-secret` | chave secreta do cliente OAuth |
+| Bucket `gs://bkm-terrenos-relatorios-app` | histórico (`historico/<id>.json`) e PDFs (`pdf/<id>.pdf`) |
+| Chave de API `relatorios-maps` | Maps JavaScript + Geocoding, restrita ao site `$URL/*` (vai para o navegador; a restrição é a proteção) |
+| Cliente OAuth "Relatórios de mercado BKM" | tela de consentimento **Interna**; URI de retorno `$URL/auth/retorno` |
 
-## 2. Login do Google (uma vez, no Console)
-1. **APIs e serviços › Tela de consentimento OAuth**: tipo **Interno** (só contas do Workspace bkm.com.br). Nome "Relatórios de mercado BKM".
-2. **Credenciais › Criar ID do cliente OAuth › Aplicativo da Web**. URI de redirecionamento autorizado: `https://<URL do serviço>/auth/retorno`
-   (a URL só existe depois do primeiro deploy: crie o cliente agora com qualquer URI e corrija no passo 6).
-3. Guarde o ID do cliente e a chave secreta.
+A conta de serviço padrão do Compute (`$SA`) lê os três segredos e tem `objectAdmin` no bucket.
 
-O app também confere no servidor que o token tem `hd = bkm.com.br` e e-mail verificado; o "Interno" é a segunda trava.
+## Variáveis do serviço
+- Segredos: `MERCADO_CHAVE`, `SESSAO_SEGREDO`, `GOOGLE_CLIENT_SECRET`
+- Ambiente: `MERCADO_URL`, `BUCKET`, `GOOGLE_MAPS_KEY`, `URL_PUBLICA`, `GOOGLE_CLIENT_ID`
 
-## 3. Chave deste app no serviço de mercado (uma vez, no projeto `bkm-terrenos`)
-No clone do `bkm-inteligencia-mercado`:
-```bash
-gcloud config set project bkm-terrenos
-python3 servico/nova_chave.py relatorios-app      # mostra a chave (guarde) e o hash
-gcloud secrets versions access latest --secret=im-chaves   # JSON atual: NÃO perca as chaves que já existem
-printf '%s' '{"claude": "...", "grok": "...", "relatorios-app": "<hash>"}' | gcloud secrets versions add im-chaves --data-file=-
-gcloud run deploy inteligencia-mercado --source . --region southamerica-east1   # relê o segredo
-gcloud config set project $PROJ
-```
-
-## 4. Segredos, bucket e chave do Maps (uma vez)
-```bash
-printf '%s' '<chave secreta do cliente OAuth>' | gcloud secrets create rm-google-client-secret --data-file=-
-printf '%s' '<chave relatorios-app do passo 3>' | gcloud secrets create rm-mercado-chave --data-file=-
-python3 -c "import secrets;print(secrets.token_urlsafe(48),end='')" | gcloud secrets create rm-sessao-segredo --data-file=-
-gcloud storage buckets create gs://$PROJ-dados --location=$REG --uniform-bucket-level-access
-SA=$(gcloud projects describe $PROJ --format='value(projectNumber)')-compute@developer.gserviceaccount.com
-for s in rm-google-client-secret rm-mercado-chave rm-sessao-segredo; do
-  gcloud secrets add-iam-policy-binding $s --member=serviceAccount:$SA --role=roles/secretmanager.secretAccessor; done
-gcloud storage buckets add-iam-policy-binding gs://$PROJ-dados --member=serviceAccount:$SA --role=roles/storage.objectAdmin
-```
-Chave do Maps: **Credenciais › Criar chave de API**, restrita a **sites** `https://<URL do serviço>/*` e às APIs
-**Maps JavaScript API** e **Geocoding API**. Ela vai para o navegador; a restrição por site é o que a protege.
-
-## 5. Deploy
-```bash
-gcloud run deploy relatorios-mercado --source . --region $REG \
-  --memory 2Gi --cpu 1 --timeout 600 --concurrency 10 --min-instances 0 --max-instances 2 --allow-unauthenticated \
-  --set-secrets GOOGLE_CLIENT_SECRET=rm-google-client-secret:latest,MERCADO_CHAVE=rm-mercado-chave:latest,SESSAO_SEGREDO=rm-sessao-segredo:latest \
-  --set-env-vars GOOGLE_CLIENT_ID=<id do cliente OAuth>,MERCADO_URL=https://inteligencia-mercado-469931692112.southamerica-east1.run.app,BUCKET=$PROJ-dados,GOOGLE_MAPS_KEY=<chave do Maps>
-URL=$(gcloud run services describe relatorios-mercado --region $REG --format='value(status.url)')
-gcloud run services update relatorios-mercado --region $REG --update-env-vars URL_PUBLICA=$URL
-curl $URL/saude
-```
-`--allow-unauthenticated` porque o login é do próprio app (Google OAuth); sem sessão, só a tela de entrar e `/saude` respondem.
-2 GiB de memória por causa do Chromium do PDF.
-
-## 6. Fechar o login
-No cliente OAuth do passo 2, troque o URI de redirecionamento por `$URL/auth/retorno` (exato, sem curinga) e
-na chave do Maps ponha `$URL/*`. Abra `$URL`, entre com a conta @bkm.com.br e gere um relatório de teste.
+O app confere no servidor que o token do Google tem `hd = bkm.com.br` e e-mail verificado; o tipo "Interno" da
+tela de consentimento é a segunda trava. `LOGIN_FALSO` nunca deve ser definido no Cloud Run.
 
 ## Redeploy depois de um merge
 ```bash
 cd ~/bkm-relatorios-mercado && git pull
-gcloud run deploy relatorios-mercado --source . --region southamerica-east1
+gcloud run deploy relatorios-mercado --source . --region $REG --project $PROJ
 ```
-Não repetir o `--set-env-vars` do primeiro deploy (apaga o `URL_PUBLICA`); para mudar uma variável use `--update-env-vars`.
+Sem `--set-env-vars`/`--set-secrets` (substituem tudo); para mudar uma variável use `--update-env-vars` ou
+`--update-secrets`.
+
+## Trocar a chave do serviço de mercado
+1. Gere chave nova e hash (`python3 servico/nova_chave.py relatorios-app` no clone do `bkm-inteligencia-mercado`).
+2. Leia `im-chaves`, troque só o valor de `relatorios-app` (não perca os outros clientes) e grave nova versão.
+3. Force nova revisão do `inteligencia-mercado` (ele lê o segredo ao subir):
+   `gcloud run services update inteligencia-mercado --region $REG --update-labels chaves=$(date +%Y%m%d%H%M)`.
+4. `printf '%s' '<chave>' | gcloud secrets versions add rm-mercado-chave --data-file=-` e redeploy deste app.
+
+## Primeira instalação do zero (referência)
+```bash
+# segredos e bucket
+python3 -c "import secrets;print(secrets.token_urlsafe(48),end='')" | gcloud secrets create rm-sessao-segredo --data-file=-
+printf '%s' '<chave relatorios-app>' | gcloud secrets create rm-mercado-chave --data-file=-
+printf '%s' '<chave secreta OAuth>' | gcloud secrets create rm-google-client-secret --data-file=-
+gcloud storage buckets create gs://$BUCKET --location=$REG --uniform-bucket-level-access
+for s in rm-mercado-chave rm-sessao-segredo rm-google-client-secret; do
+  gcloud secrets add-iam-policy-binding $s --member=serviceAccount:$SA --role=roles/secretmanager.secretAccessor; done
+gcloud storage buckets add-iam-policy-binding gs://$BUCKET --member=serviceAccount:$SA --role=roles/storage.objectAdmin
+# chave do Maps
+gcloud services enable apikeys.googleapis.com maps-backend.googleapis.com geocoding-backend.googleapis.com
+gcloud services api-keys create --display-name=relatorios-maps \
+  --api-target=service=maps-backend.googleapis.com --api-target=service=geocoding-backend.googleapis.com \
+  --allowed-referrers="$URL/*"
+# deploy
+gcloud run deploy relatorios-mercado --source . --region $REG \
+  --memory 2Gi --cpu 1 --timeout 600 --concurrency 10 --min-instances 0 --max-instances 2 --allow-unauthenticated \
+  --set-secrets MERCADO_CHAVE=rm-mercado-chave:latest,SESSAO_SEGREDO=rm-sessao-segredo:latest,GOOGLE_CLIENT_SECRET=rm-google-client-secret:latest \
+  --set-env-vars MERCADO_URL=https://inteligencia-mercado-469931692112.southamerica-east1.run.app,BUCKET=$BUCKET,GOOGLE_MAPS_KEY=<chave>,URL_PUBLICA=$URL,GOOGLE_CLIENT_ID=<id>
+```
+O cliente OAuth é criado no Console: **APIs e serviços › Credenciais › Criar ID do cliente OAuth › Aplicativo da
+Web**, URI de retorno `$URL/auth/retorno` (exato, sem curinga).
+
+`--allow-unauthenticated` porque o login é do próprio app; sem sessão só a tela de entrar e `/saude` respondem.
+2 GiB de memória por causa do Chromium do PDF.
 
 ## Ambiente de desenvolvimento (opcional)
-Mesmo comando com o serviço `relatorios-mercado-dev`, `AMBIENTE=dev` (selo "Desenvolvimento" na barra) e o URI
-de retorno dele acrescentado no mesmo cliente OAuth.
+Mesmo comando com o serviço `relatorios-mercado-dev`, `AMBIENTE=dev` (selo "Desenvolvimento" na barra), e o URI de
+retorno dele acrescentado no mesmo cliente OAuth e na chave do Maps.

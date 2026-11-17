@@ -19,7 +19,7 @@ VSO, índice de velocidade, curvas por safra) para os pontos que quiser e baixar
 servidor/   FastAPI: login (sessao.py), validação da spec (spec.py), histórico (guarda.py), PDF (pdf.py), rotas (app.py)
 web/        página sem build (index.html, app.js, app.css), tela de entrar, logo e a lista de estações
 tests/      pytest + serviço de mercado falso (mercado_falso.py)
-docs/       deploy.md
+docs/       deploy.md (Cloud Run no projeto bkm-terrenos)
 ```
 
 ## Rodar local
