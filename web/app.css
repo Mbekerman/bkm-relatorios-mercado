@@ -100,14 +100,29 @@ main{padding:16px 24px 64px;min-width:0}
 .chip[aria-pressed="true"]{background:var(--selecao);color:var(--sobre-selecao);border-color:var(--veu-contorno,var(--selecao))}
 .chip .x{border:0;background:none;color:inherit;cursor:pointer;padding:0;font-size:16px;line-height:1}
 
-/* tela de novo relatório */
-.novo{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,44%);gap:24px;align-items:start}
+/* tela de novo relatório: uma coluna; o mapa abre numa janela (pedido do Moises, 17/nov/2026) */
+.novo{display:grid;grid-template-columns:minmax(0,960px);gap:24px;align-items:start}
+/* sugestões de endereço */
+.sugestoes{position:fixed;z-index:60;margin:0;padding:6px 0;list-style:none;background:var(--sup);border:1px solid var(--contorno);border-radius:var(--raio-chip);box-shadow:0 4px 16px rgba(0,0,0,.18);max-height:320px;overflow:auto}
+.sugestoes li{display:flex;flex-direction:column;padding:8px 14px;cursor:pointer;line-height:1.3}
+.sugestoes li span{font-size:12px;color:var(--texto-suave)}
+.sugestoes li[aria-selected="true"],.sugestoes li:hover{background:var(--sup-alta)}
+/* janela do mapa */
+.janela-mapa{width:min(1400px,94vw);height:min(900px,90vh);max-width:none;max-height:none;padding:0;border:1px solid var(--contorno);border-radius:var(--raio-card);background:var(--sup);color:var(--texto);overflow:hidden}
+.janela-mapa[open]{display:flex;flex-direction:column}
+.janela-mapa::backdrop{background:rgba(6,12,32,.55)}
+.janela-mapa>header{display:flex;align-items:center;gap:16px;padding:12px 16px;border-bottom:1px solid var(--contorno)}
+.janela-mapa>header h2{font-size:18px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto}
+.janela-mapa .busca{flex:1 1 360px;max-width:640px;margin-left:auto}
+.janela-corpo{position:relative;flex:1;min-height:0}
+.janela-corpo #mapa{position:absolute;inset:0}
+.mapa-aviso{position:absolute;left:50%;transform:translateX(-50%);top:12px;background:var(--sup);border:1px solid var(--contorno);border-radius:var(--raio-chip);padding:8px 14px;font-size:13px;box-shadow:0 2px 6px rgba(0,0,0,.15);max-width:calc(100% - 24px)}
+.confirma{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);width:min(480px,calc(100% - 24px));background:var(--sup);border:1px solid var(--contorno);border-radius:var(--raio-card);padding:16px 20px;box-shadow:0 8px 24px rgba(0,0,0,.25);display:flex;flex-direction:column;gap:6px}
+.confirma[hidden]{display:none}
+.confirma h3{margin:0;font-size:16px}.confirma p{margin:0}
+.confirma .acoes{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+@media (max-width:700px){.janela-mapa>header{flex-wrap:wrap}.janela-mapa .busca{flex-basis:100%}}
 .novo .col{display:flex;flex-direction:column;gap:16px;min-width:0}
-.mapa-box{position:sticky;top:80px;height:calc(100vh - 104px);min-height:420px;border:1px solid var(--contorno);border-radius:var(--raio-card);overflow:hidden;background:var(--sup-baixa)}
-#mapa{width:100%;height:100%}
-.mapa-aviso{position:absolute;inset:auto 12px 12px 12px;background:var(--sup);border:1px solid var(--contorno);border-radius:var(--raio-chip);padding:8px 12px;font-size:13px}
-.mapa-sem{display:grid;place-items:center;height:100%;padding:24px;text-align:center;color:var(--texto-suave)}
-@media (max-width:1100px){.novo{grid-template-columns:1fr}.mapa-box{position:relative;top:0;height:420px}}
 .ponto{border:1px solid var(--contorno);border-radius:var(--raio-card);padding:16px;display:flex;flex-direction:column;gap:12px}
 .ponto.ativo{border-color:var(--link);box-shadow:inset 0 0 0 1px var(--link)}
 .ponto>header{display:flex;align-items:center;gap:12px}

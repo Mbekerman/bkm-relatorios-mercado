@@ -13,7 +13,7 @@ Rotas (todas pedem sessão, menos /saude, /auth/* e os arquivos do login):
   POST /api/relatorios        gera (corpo = formulário)      GET /api/relatorios   histórico
   GET  /r/<id>                a página do relatório          GET /r/<id>.pdf       o PDF
 """
-import datetime, os, re, unicodedata, urllib.parse
+import datetime, json, os, re, unicodedata, urllib.parse
 import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -197,7 +197,12 @@ async def _html(rid):
     r = await _mercado('GET', f'/relatorios/{rid}')
     if r.status_code != 200:
         raise HTTPException(404 if r.status_code == 404 else 502, 'relatório não encontrado no serviço de mercado')
-    return r.text
+    html = r.text
+    if config.GOOGLE_MAPS_KEY:  # o mapa do relatório usa a chave do app (restrita ao endereço do app)
+        tag = f'<script>window.BKM_MAPS_KEY={json.dumps(config.GOOGLE_MAPS_KEY)}</script>'
+        i = html.find('<style')  # depois do doctype/título, antes do código do motor
+        html = html[:i] + tag + html[i:] if i >= 0 else tag + html
+    return html
 
 
 @app.get('/r/{rid}.pdf')
