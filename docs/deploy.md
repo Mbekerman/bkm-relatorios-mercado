@@ -71,7 +71,10 @@ gcloud run deploy relatorios-mercado --source . --region $REG \
 O cliente OAuth é criado no Console: **APIs e serviços › Credenciais › Criar ID do cliente OAuth › Aplicativo da
 Web**, URI de retorno `$URL/auth/retorno` (exato, sem curinga).
 
-`--allow-unauthenticated` porque o login é do próprio app; sem sessão só a tela de entrar e `/saude` respondem.
+A política da organização bloqueia `allUsers` como invocador, então o `--allow-unauthenticated` falha com aviso. Como no
+`inteligencia-mercado`, o serviço roda com a checagem de IAM desligada
+(`gcloud run services update relatorios-mercado --no-invoker-iam-check`, feito em 17/nov/2026 com aval do Moises).
+O login é do próprio app; sem sessão só a tela de entrar e `/saude` respondem.
 2 GiB de memória por causa do Chromium do PDF.
 
 ## Ambiente de desenvolvimento (opcional)
